@@ -83,8 +83,21 @@ class ClaudeClient:
             )
             return True, "Claude API 연결 성공"
         except anthropic.AuthenticationError:
-            return False, "API 키가 올바르지 않습니다"
+            return False, "API 키가 올바르지 않습니다. 키를 다시 확인해 주세요."
         except anthropic.APIConnectionError:
-            return False, "Claude 서버에 연결할 수 없습니다"
+            return False, "Claude 서버에 연결할 수 없습니다."
+        except anthropic.BadRequestError as e:
+            msg = str(e)
+            if "credit balance" in msg:
+                return False, "API 키는 유효하지만 크레딧이 부족합니다.\nconsole.anthropic.com → Plans & Billing에서 충전해 주세요."
+            return False, f"요청 오류: {msg}"
+        except anthropic.APIStatusError as e:
+            msg = str(e)
+            if "credit balance" in msg:
+                return False, "API 키는 유효하지만 크레딧이 부족합니다.\nconsole.anthropic.com → Plans & Billing에서 충전해 주세요."
+            return False, f"API 오류 ({e.status_code}): {msg[:100]}"
         except Exception as e:
-            return False, f"오류: {str(e)}"
+            msg = str(e)
+            if "credit balance" in msg:
+                return False, "API 키는 유효하지만 크레딧이 부족합니다.\nconsole.anthropic.com → Plans & Billing에서 충전해 주세요."
+            return False, f"오류: {msg[:100]}"

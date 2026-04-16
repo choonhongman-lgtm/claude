@@ -98,10 +98,17 @@ class WikiClient:
 
     def get_all_pages(self, on_progress=None) -> list[dict]:
         """
-        접근 가능한 모든 위키의 모든 페이지를 가져옵니다.
+        설정에서 선택된 Wiki ID의 모든 페이지를 가져옵니다.
+        선택된 Wiki가 없으면 접근 가능한 전체 Wiki를 수집합니다.
         on_progress(count, title) — 진행 상황 콜백 (선택)
         """
-        wikis = self.get_wikis()
+        selected_ids = self.config.get("selected_wiki_ids", [])
+
+        if selected_ids:
+            wikis = [{"id": wid} for wid in selected_ids]
+        else:
+            wikis = self.get_wikis()
+
         all_pages: list[dict] = []
         for wiki in wikis:
             wiki_id = wiki.get("id")

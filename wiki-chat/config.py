@@ -8,9 +8,11 @@ class Config:
     CACHE_FILE = CONFIG_DIR / "wiki_cache.json"
 
     DEFAULT = {
-        "wiki_url": "",    # 예: https://nhn.dooray.com
-        "wiki_token": "",  # 두레이 API 토큰
-        "claude_api_key": "",
+        "wiki_url": "",            # API URL: https://api.dooray.com
+        "wiki_token": "",          # 두레이 API 토큰
+        "wiki_web_url": "",        # 웹 URL: https://nhnent.dooray.com
+        "selected_wiki_ids": [],   # 수집할 Wiki ID 목록
+        "selected_wiki_names": [], # 표시용 Wiki 이름 목록
     }
 
     def __init__(self):
@@ -38,5 +40,5 @@ class Config:
         return bool(
             self._data.get("wiki_url")
             and self._data.get("wiki_token")
-            and self._data.get("claude_api_key")
+            and self._data.get("wiki_web_url")
         )
