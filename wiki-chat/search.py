@@ -71,13 +71,36 @@ class WikiSearch:
 
     # ── 검색 ────────────────────────────────────────────────────────────────────
 
-    def search(self, query: str, top_k: int = 3) -> list[dict]:
+    def search(self, query: str, top_k: int = 0) -> list[dict]:
+        """
+        top_k=0 이면 관련 있는 모든 결과를 반환합니다.
+        최고 점수의 15% 미만인 결과는 관련성이 낮다고 판단해 제외합니다.
+        """
         if not self._bm25 or not self._pages:
             return []
+
         tokens = self._tokenize(query)
         scores = self._bm25.get_scores(tokens)
         ranked = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
-        return [self._pages[i] for i in ranked[:top_k] if scores[i] > 0]
+
+        if not ranked or scores[ranked[0]] == 0:
+            return []
+
+        # 최고 점수 기준으로 상대적 임계값 적용
+        max_score = scores[ranked[0]]
+        threshold = max_score * 0.15
+
+        results = []
+        for i in ranked:
+            if scores[i] < threshold:
+                break
+            page = dict(self._pages[i])
+            page["_score"] = round(scores[i], 2)
+            results.append(page)
+
+        if top_k:
+            return results[:top_k]
+        return results
 
     def get_cache_size(self) -> int:
         return len(self._pages)

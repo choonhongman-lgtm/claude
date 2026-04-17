@@ -13,6 +13,7 @@ class Config:
         "wiki_web_url": "",        # 웹 URL: https://nhnent.dooray.com
         "selected_wiki_ids": [],   # 수집할 Wiki ID 목록
         "selected_wiki_names": [], # 표시용 Wiki 이름 목록
+        "enable_ocr": False,       # 이미지 텍스트 추출 여부
     }
 
     def __init__(self):

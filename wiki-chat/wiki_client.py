@@ -119,6 +119,16 @@ class WikiClient:
 
     # ── 연결 테스트 ──────────────────────────────────────────────────────────────
 
+    def download_image(self, wiki_id: str, attach_file_id: str) -> bytes:
+        """
+        이미지 파일을 다운로드합니다.
+        GET /wiki/v1/wikis/{wiki-id}/attachFiles/{attach-file-id}
+        """
+        url = f"{self.base_url}/wiki/v1/wikis/{wiki_id}/attachFiles/{attach_file_id}"
+        response = requests.get(url, headers=self.headers, timeout=30, allow_redirects=True)
+        response.raise_for_status()
+        return response.content
+
     def test_connection(self) -> tuple[bool, str]:
         try:
             url = f"{self.base_url}/wiki/v1/wikis"

@@ -75,6 +75,27 @@ class SettingsWindow(ctk.CTkToplevel):
         self.wiki_test_label = ctk.CTkLabel(scroll, text="", wraplength=470)
         self.wiki_test_label.pack(pady=(0, 6))
 
+        # ── OCR 설정 ──
+        ctk.CTkFrame(scroll, height=2, fg_color="gray50").pack(fill="x", pady=10)
+        self._section(scroll, "이미지 텍스트 추출 (OCR)")
+
+        ocr_row = ctk.CTkFrame(scroll, fg_color="transparent")
+        ocr_row.pack(fill="x", pady=(0, 4))
+        self.ocr_switch = ctk.CTkSwitch(
+            ocr_row, text="Wiki 업데이트 시 이미지에서 텍스트 추출",
+            font=ctk.CTkFont(size=13),
+        )
+        self.ocr_switch.pack(side="left")
+
+        ctk.CTkLabel(
+            scroll,
+            text="• 처음 실행 시 EasyOCR 모델 다운로드 (~1.5GB)\n"
+                 "• 이미지가 많을수록 업데이트 시간이 길어집니다\n"
+                 "• 설치:  py -m pip install easyocr",
+            font=ctk.CTkFont(size=11), text_color="gray",
+            justify="left",
+        ).pack(anchor="w", pady=(0, 10))
+
         # ── 저장 ──
         ctk.CTkFrame(scroll, height=2, fg_color="gray50").pack(fill="x", pady=10)
         ctk.CTkButton(scroll, text="저장", width=200, height=40,
@@ -100,6 +121,10 @@ class SettingsWindow(ctk.CTkToplevel):
         self.wiki_url.insert(0, self.config.get("wiki_url", ""))
         self.wiki_web_url.insert(0, self.config.get("wiki_web_url", ""))
         self.wiki_token.insert(0, self.config.get("wiki_token", ""))
+        if self.config.get("enable_ocr", False):
+            self.ocr_switch.select()
+        else:
+            self.ocr_switch.deselect()
 
     # ── Wiki 목록 ────────────────────────────────────────────────────────────────
 
@@ -154,6 +179,7 @@ class SettingsWindow(ctk.CTkToplevel):
         self.config.set("wiki_url", self.wiki_url.get().strip())
         self.config.set("wiki_web_url", self.wiki_web_url.get().strip().rstrip("/"))
         self.config.set("wiki_token", self.wiki_token.get().strip())
+        self.config.set("enable_ocr", self.ocr_switch.get() == 1)
 
         selected_ids = [wid for wid, var in self._wiki_vars.items() if var.get()]
         selected_names = [

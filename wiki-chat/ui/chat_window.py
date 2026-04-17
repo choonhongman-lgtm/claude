@@ -149,6 +149,31 @@ class ChatWindow:
 
         self._scroll_bottom()
 
+    def _keyword_snippet(self, content: str, query: str, length: int = 180) -> str:
+        """검색어가 실제로 등장하는 주변 텍스트를 반환합니다."""
+        if not content:
+            return ""
+        content_clean = content.replace("\n", " ")
+        # 쿼리에서 2글자 이상 단어 추출
+        keywords = [w for w in query.split() if len(w) >= 2]
+
+        best_pos = -1
+        for kw in keywords:
+            pos = content_clean.lower().find(kw.lower())
+            if pos != -1:
+                best_pos = pos
+                break
+
+        if best_pos == -1:
+            # 키워드 미발견 시 앞부분 반환
+            snippet = content_clean[:length]
+            return snippet + ("..." if len(content_clean) > length else "")
+
+        start = max(0, best_pos - 60)
+        end = min(len(content_clean), best_pos + length)
+        snippet = content_clean[start:end]
+        return ("..." if start > 0 else "") + snippet + ("..." if end < len(content_clean) else "")
+
     def _add_result_cards(self, pages: list[dict]):
         """검색 결과를 카드 형태로 표시합니다."""
         web_url = self.config.get("wiki_web_url", "").rstrip("/")
@@ -172,16 +197,16 @@ class ChatWindow:
         ).pack(side="left", anchor="w")
 
         # 결과 카드
+        # 검색창의 현재 텍스트를 쿼리로 사용
+        query = self.input_box.get("1.0", "end-1c").strip()
+
         for page in pages:
             page_id = page.get("id", "")
             wiki_id = page.get("wikiId", "")
             title = page.get("subject", "제목 없음")
             body = page.get("body", {})
             content = body.get("content", "") if isinstance(body, dict) else ""
-            snippet = content[:150].replace("\n", " ").strip()
-            if len(content) > 150:
-                snippet += "..."
-
+            snippet = self._keyword_snippet(content, query)
             url = f"{web_url}/wiki/{wiki_id}/{page_id}" if web_url and wiki_id else ""
 
             card = ctk.CTkFrame(
@@ -227,6 +252,29 @@ class ChatWindow:
 
         self._scroll_bottom()
 
+    def _show_no_result_popup(self, query: str):
+        popup = ctk.CTkToplevel(self.root)
+        popup.title("검색 결과 없음")
+        popup.geometry("360x160")
+        popup.resizable(False, False)
+        popup.grab_set()
+        popup.focus_set()
+
+        # 화면 중앙 배치
+        popup.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() - 360) // 2
+        y = self.root.winfo_y() + (self.root.winfo_height() - 160) // 2
+        popup.geometry(f"360x160+{x}+{y}")
+
+        ctk.CTkLabel(
+            popup,
+            text=f"'{query[:30]}'\n에 대한 검색 결과가 없습니다.\n\n다른 키워드로 검색해 보세요.",
+            font=ctk.CTkFont(size=13),
+            justify="center",
+        ).pack(expand=True)
+
+        ctk.CTkButton(popup, text="확인", width=100, command=popup.destroy).pack(pady=(0, 16))
+
     def _add_no_result(self):
         row = ctk.CTkFrame(self.chat_frame, fg_color="transparent")
         row.pack(fill="x", padx=16, pady=4)
@@ -255,6 +303,11 @@ class ChatWindow:
             self._send_message()
             return "break"
 
+    def _clear_chat(self):
+        """채팅 영역의 모든 위젯을 제거합니다."""
+        for widget in self.chat_frame.winfo_children():
+            widget.destroy()
+
     def _send_message(self):
         text = self.input_box.get("1.0", "end-1c").strip()
         if not text:
@@ -266,14 +319,68 @@ class ChatWindow:
             self._add_system("Wiki 업데이트를 먼저 실행해 주세요.")
             return
 
-        self.input_box.delete("1.0", "end")
-        self._add_user_bubble(text)
+        pages = self.wiki_search.search(text, top_k=0)
 
-        pages = self.wiki_search.search(text, top_k=5)
-        if pages:
-            self._add_result_cards(pages)
-        else:
-            self._add_no_result()
+        if not pages:
+            self._show_no_result_popup(text)
+            return
+
+        # 이전 검색 결과 초기화 후 새 결과만 표시
+        self._clear_chat()
+        self._add_user_bubble(text)
+        self._add_result_cards(pages)
+
+    # ── OCR 처리 ────────────────────────────────────────────────────────────────
+
+    def _run_ocr(self, pages: list[dict]) -> list[dict]:
+        """각 페이지의 이미지에서 텍스트를 추출하여 본문에 추가합니다."""
+        from ocr_processor import OCRProcessor
+        ocr = OCRProcessor()
+
+        total_images = sum(len(p.get("images", [])) for p in pages)
+        processed = 0
+
+        for page in pages:
+            images = page.get("images", [])
+            wiki_id = page.get("wikiId", "")
+            if not images or not wiki_id:
+                continue
+
+            ocr_texts = []
+            for img in images:
+                attach_id = img.get("attachFileId", "")
+                if not attach_id:
+                    continue
+
+                processed += 1
+                name = img.get("name", "")
+                self.root.after(0, lambda c=processed, t=total_images, n=name:
+                    self.cache_label.configure(
+                        text=f"OCR 처리 중... {c}/{t}  ({n[:15]})",
+                        text_color="gray"
+                    )
+                )
+
+                try:
+                    if ocr.is_cached(attach_id):
+                        text = ocr.extract(b"", cache_key=attach_id)
+                    else:
+                        image_bytes = self.wiki_client.download_image(wiki_id, attach_id)
+                        text = ocr.extract(image_bytes, cache_key=attach_id)
+                    if text.strip():
+                        ocr_texts.append(text.strip())
+                except Exception:
+                    pass
+
+            if ocr_texts:
+                body = page.get("body", {})
+                existing = body.get("content", "") if isinstance(body, dict) else ""
+                page["body"] = {
+                    "content": existing + "\n\n[이미지 텍스트]\n" + "\n".join(ocr_texts),
+                    "mimeType": "text/x-markdown",
+                }
+
+        return pages
 
     # ── Wiki 업데이트 ────────────────────────────────────────────────────────────
 
@@ -293,6 +400,11 @@ class ChatWindow:
         def run():
             try:
                 pages = self.wiki_client.get_all_pages(on_progress=on_progress)
+
+                # OCR 처리
+                if self.config.get("enable_ocr", False):
+                    pages = self._run_ocr(pages)
+
                 self.wiki_search.update_cache(pages)
                 msg = f"업데이트 완료! {len(pages)}개 페이지를 불러왔습니다."
             except Exception as e:
