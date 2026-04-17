@@ -71,33 +71,40 @@ class WikiSearch:
 
     # ── 검색 ────────────────────────────────────────────────────────────────────
 
-    def search(self, query: str, top_k: int = 0) -> list[dict]:
+    @staticmethod
+    def _normalize(text: str) -> str:
+        """공백을 모두 제거하고 소문자로 변환 (띄어쓰기 무관 검색용)"""
+        return re.sub(r"\s+", "", text.lower())
+
+    def _phrase_search(self, query: str) -> list[dict]:
         """
-        top_k=0 이면 관련 있는 모든 결과를 반환합니다.
-        최고 점수의 15% 미만인 결과는 관련성이 낮다고 판단해 제외합니다.
+        띄어쓰기를 무시하고 원문 텍스트가 포함된 페이지를 찾습니다.
+        예) "PG 승인취소" == "PG승인 취소" == "PG승인취소"
         """
-        if not self._bm25 or not self._pages:
+        norm_query = self._normalize(query)
+        if not norm_query:
             return []
-
-        tokens = self._tokenize(query)
-        scores = self._bm25.get_scores(tokens)
-        ranked = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
-
-        if not ranked or scores[ranked[0]] == 0:
-            return []
-
-        # 최고 점수 기준으로 상대적 임계값 적용
-        max_score = scores[ranked[0]]
-        threshold = max_score * 0.15
 
         results = []
-        for i in ranked:
-            if scores[i] < threshold:
-                break
-            page = dict(self._pages[i])
-            page["_score"] = round(scores[i], 2)
-            results.append(page)
+        for page in self._pages:
+            title, content = extract_text(page)
+            norm_title = self._normalize(title)
+            norm_content = self._normalize(content)
+            if norm_query in norm_title or norm_query in norm_content:
+                p = dict(page)
+                p["_score"] = 9999  # 전문 매칭은 최우선 점수
+                results.append(p)
+        return results
 
+    def search(self, query: str, top_k: int = 0) -> list[dict]:
+        """
+        띄어쓰기 무관 전문 검색만 사용 (완전 일치)
+        top_k=0 이면 모든 결과 반환
+        """
+        if not self._pages:
+            return []
+
+        results = self._phrase_search(query)
         if top_k:
             return results[:top_k]
         return results
